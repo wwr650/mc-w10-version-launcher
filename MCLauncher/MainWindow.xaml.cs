@@ -106,7 +106,7 @@ namespace MCLauncher {
         private async void LoadVersionList() {
             _versions.PrepareForReload();
 
-            LoadingProgressLabel.Content = "Loading GDK versions from cache";
+            LoadingProgressLabel.Content = "从缓存加载GDK版本";
             LoadingProgressBar.Value = 1;
 
             LoadingProgressGrid.Visibility = Visibility.Visible;
@@ -117,7 +117,7 @@ namespace MCLauncher {
                 Debug.WriteLine("List cache load failed:\n" + e.ToString());
             }
 
-            LoadingProgressLabel.Content = "Loading UWP versions from cache";
+            LoadingProgressLabel.Content = "从缓存加载UWP版本";
             LoadingProgressBar.Value = 2;
             try {
                 await _versions.LoadFromCacheUWP();
@@ -127,26 +127,26 @@ namespace MCLauncher {
 
             _versions.PrepareForReload();
 
-            LoadingProgressLabel.Content = "Downloading new GDK version data";
+            LoadingProgressLabel.Content = "正在下载新的GDK版本数据";
             LoadingProgressBar.Value = 3;
             try {
                 await _versions.DownloadVersionsGDK();
             } catch (Exception e) {
                 Debug.WriteLine("List download failed:\n" + e.ToString());
-                MessageBox.Show("Failed to update version list from the internet. Some new versions might be missing.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("无法从网络更新版本列表。可能缺少一些新版本.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
 
 
-            LoadingProgressLabel.Content = "Downloading new UWP version data";
+            LoadingProgressLabel.Content = "正在下载新的UWP版本数据";
             LoadingProgressBar.Value = 4;
             try {
                 await _versions.DownloadVersionsUWP();
             } catch (Exception e) {
                 Debug.WriteLine("List download failed:\n" + e.ToString());
-                MessageBox.Show("Failed to update version list from the internet. Some new versions might be missing.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("无法从网络更新版本列表。可能缺少一些新版本.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
 
-            LoadingProgressLabel.Content = "Loading imported versions";
+            LoadingProgressLabel.Content = "正在加载导入的版本";
             LoadingProgressBar.Value = 5;
             await _versions.LoadImported();
 
@@ -168,14 +168,14 @@ namespace MCLauncher {
                     foreach (var version in _versions) {
                         if (version.IsImported && version.GameDirectory == directory) {
                             if (version.IsStateChanging) {
-                                MessageBox.Show("A version with the same name was already imported, and is currently being modified. Please wait a few moments and try again.", "Error");
+                                MessageBox.Show("同名版本已导入，目前正在修改中。请稍等片刻，然后重试.", "Error");
                                 return;
                             }
-                            MessageBoxResult messageBoxResult = System.Windows.MessageBox.Show("A version with the same name was already imported. Do you want to delete it ?", "Delete Confirmation", System.Windows.MessageBoxButton.YesNo);
+                            MessageBoxResult messageBoxResult = System.Windows.MessageBox.Show("已导入同名版本。您想删除它吗？", "Delete Confirmation", System.Windows.MessageBoxButton.YesNo);
                             if (messageBoxResult == MessageBoxResult.Yes) {
                                 var uninstallResult = await Remove(version);
                                 if (!uninstallResult) {
-                                    MessageBox.Show("Failed to remove existing version. Import aborted.", "Error");
+                                    MessageBox.Show("删除现有版本失败。导入已中止.", "Error");
                                     return;
                                 }
                                 found = true;
@@ -186,7 +186,7 @@ namespace MCLauncher {
                         }
                     }
                     if (!found) {
-                        MessageBox.Show("The destination path for importing already exists and doesn't contain a Minecraft installation known to the launcher. To avoid loss of data, importing was aborted. Please remove the files manually.", "Error");
+                        MessageBox.Show("导入的目标路径已存在，并且不包含启动器已知的Minecraft安装。为了避免数据丢失，导入已中止。请手动删除文件.", "Error");
                         return;
                     }
                 }
@@ -198,7 +198,7 @@ namespace MCLauncher {
                 } else if (extension == ".appx") {
                     packageType = PackageType.UWP;
                 } else {
-                    MessageBox.Show("Unsupported file extension: " + extension, "Import failure");
+                    MessageBox.Show("不支持的文件扩展名: " + extension, "Import failure");
                     return;
                 }
 
@@ -241,10 +241,10 @@ namespace MCLauncher {
             }
 
             MessageBox.Show(
-                "Failed to import file: " + fileName + "\n\n" +
+                "导入文件失败: " + fileName + "\n\n" +
                 userMessage +
-                (ex != null ? "\n\nException message: " + exceptionMessage : "") +
-                "\n\nCheck the log file if you need more information (File -> Open log file).", "Import failure"
+                (ex != null ? "\n\n异常消息: " + exceptionMessage : "") +
+                "\n\n如果需要更多信息，请检查日志文件（文件->打开日志文件）.", "Import failure"
             );
         }
 
@@ -275,18 +275,18 @@ namespace MCLauncher {
         private bool ShowGDKFirstUseWarning() {
             if (!UserPrefs.HasPreviouslyUsedGDK) {
                 var result = MessageBox.Show(
-                    "The launcher has detected that this is your first time using a GDK version of Minecraft in this launcher.\n" +
-                        "Please be aware of the following:\n\n" +
-                        "You MUST install a GDK version of Minecraft from the Store before attempting to use the launcher for GDK versions.\n" +
-                        "This is because the launcher needs the Store to install the keys to decrypt the installation packages.\n" +
-                        "If you don't, the installation packages may show corruption messages.\n\n" +
-                        "It is STRONGLY recommended to add an exclusion for C:\\XboxGames (or wherever your games install by default) to Windows Defender, " +
-                        "otherwise the installation process will take 10x as long.\n\n" +
-                        "During installation, you will see a few dialog boxes and a PowerShell window briefly pop up.\n" +
-                        "This is normal and is an unavoidable consequence of the installation method used for GDK versions.\n\n" +
-                        "Please also note that the location of your worlds will change when moving from UWP to GDK and vice versa.\n" +
-                        "If you can't find your worlds, you can use Tools -> \"Find my data\" to locate them.",
-                    "Minecraft GDK warning",
+                    "启动器检测到这是您第一次在此启动器中使用GDK版本的Minecraft.\n" +
+                        "请注意以下事项:\n\n" +
+                        "在尝试使用GDK版本的启动器之前，您必须从应用商店安装GDK版的Minecraft.\n" +
+                        "这是因为启动器需要应用商店安装密钥来解密安装包.\n" +
+                        "如果不这样做，安装包可能会显示损坏消息.\n\n" +
+                        "强烈建议在Windows Defender中为C:\\XboxGames（或默认情况下安装游戏的任何地方）添加排除项, " +
+                        "否则，安装过程将花费10倍的时间.\n\n" +
+                        "在安装过程中，您将看到几个对话框和一个PowerShell窗口短暂弹出.\n" +
+                        "这是正常的，是GDK版本使用的安装方法不可避免的结果.\n\n" +
+                        "另请注意，从UWP移动到GDK时，您的世界的位置会发生变化，反之亦然.\n" +
+                        "如果你找不到你的世界，你可以使用工具->“查找我的数据”来定位它们.",
+                    "Minecraft GDK警告",
                     MessageBoxButton.OKCancel
                 );
                 if (result == MessageBoxResult.OK) {
@@ -581,7 +581,7 @@ namespace MCLauncher {
                     await ReRegisterPackage(v.GamePackageFamily, gameDir, v);
                 } catch (Exception e) {
                     Debug.WriteLine("App re-register failed:\n" + e.ToString());
-                    MessageBox.Show("App re-register failed:\n" + e.ToString());
+                    MessageBox.Show("App重新注册失败:\n" + e.ToString());
                     _hasLaunchTask = false;
                     v.StateChangeInfo = null;
                     return;
@@ -614,7 +614,7 @@ namespace MCLauncher {
                     Debug.WriteLine("App launch finished!");
                 } catch (Exception e) {
                     Debug.WriteLine("App launch failed:\n" + e.ToString());
-                    MessageBox.Show("App launch failed:\n" + e.ToString());
+                    MessageBox.Show("App启动失败:\n" + e.ToString());
                     return;
                 } finally {
                     _hasLaunchTask = false;
@@ -754,7 +754,7 @@ namespace MCLauncher {
                     //try to be uninstalled at the same time???
                     Debug.WriteLine("BackupMinecraftDataForRemoval error: " + tmpDir + " already exists");
                     Process.Start("explorer.exe", tmpDir);
-                    MessageBox.Show("The temporary directory for backing up MC data already exists. This probably means that we failed last time backing up the data. Please back the directory up manually.");
+                    MessageBox.Show("用于备份MC数据的临时目录已存在。这可能意味着我们上次备份数据失败了。请手动备份目录.");
                     return false;
                 }
                 Directory.Delete(tmpDir, recursive: true);
@@ -769,7 +769,7 @@ namespace MCLauncher {
             foreach (var f in Directory.EnumerateFiles(from)) {
                 string ft = Path.Combine(to, Path.GetFileName(f));
                 if (File.Exists(ft)) {
-                    if (MessageBox.Show("The file " + ft + " already exists in the destination.\nDo you want to replace it? The old file will be lost otherwise.", "Restoring data directory from previous installation", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
+                    if (MessageBox.Show("目标" + ft + " 中已存在文件.\n否则，旧文件将丢失.", "Restoring data directory from previous installation", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                         continue;
                     File.Delete(ft);
                 }
@@ -778,7 +778,7 @@ namespace MCLauncher {
             foreach (var f in Directory.EnumerateDirectories(from)) {
                 string tp = Path.Combine(to, Path.GetFileName(f));
                 if (!Directory.Exists(tp)) {
-                    if (File.Exists(tp) && MessageBox.Show("The file " + tp + " is not a directory. Do you want to remove it? The data from the old directory will be lost otherwise.", "Restoring data directory from previous installation", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
+                    if (File.Exists(tp) && MessageBox.Show("文件 " + tp + " 不是目录。是否要删除它？否则，旧目录中的数据将丢失.", "Restoring data directory from previous installation", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                         continue;
                     Directory.CreateDirectory(tp);
                 }
@@ -805,11 +805,12 @@ namespace MCLauncher {
                 return true;
             } catch (Exception e) {
                 Debug.WriteLine("Failed restoring Minecraft data from " + src + ": " + e.ToString());
-                MessageBox.Show("Failed to move Minecraft data from:\n"
+                MessageBox.Show("无法从\n"
                     + src
-                    + "\nto:\n"
+                    +"\n移动Minecraft数据\n"
+                    + "到:\n"
                     + uwpDataDir
-                    + "\n\nCheck the log file for more information.", "Data restore error"
+                    + "\n\n有关详细信息，请检查日志文件.", "Data restore error"
                 );
                 return false;
             }
@@ -829,9 +830,9 @@ namespace MCLauncher {
                 }
                 Debug.WriteLine("Can't automatically restore Minecraft data - multiple locations with worlds found:" + messageString);
                 MessageBox.Show(
-                    "Unable to automatically restore Minecraft worlds for UWP, because multiple locations with worlds were found:"
+                    "无法为UWP自动恢复Minecraft世界，因为找到了多个具有世界的位置:"
                         + messageString
-                        + "\n\nPlease resolve the conflicts manually by copying worlds into the desired location.",
+                        + "\n\n请通过将世界复制到所需位置手动解决冲突.",
                     "Data restore error"
                 );
                 return false;
@@ -869,11 +870,11 @@ namespace MCLauncher {
                 } catch (Exception e) {
                     Debug.WriteLine("Failed deleting uwpMigration.dat: " + e.ToString());
                     MessageBox.Show(
-                        "Failed deleting uwpMigration.dat file.\n" +
-                        "Your worlds will be visible to UWP versions, but GDK versions won't see them unless you move them back manually.\n\n" +
-                        "Please delete the following file manually: " + uwpMigrationDat +
-                        "\n\nAlternatively, you can copy your worlds back to the GDK folder next time you run a GDK version." +
-                        "\nYour worlds are currently located at: " + uwpDataDir +
+                        "删除uwpMigration.dat文件失败.\n" +
+                        "您的世界将对UWP版本可见，但GDK版本将看不到它们，除非您手动将其移回.\n\n" +
+                        "请手动删除以下文件: " + uwpMigrationDat +
+                        "\n\n或者，您可以在下次运行GDK版本时将您的世界复制回GDK文件夹." +
+                        "\n您的世界当前位于: " + uwpDataDir +
                         "Data migration notice"
                     );
                     return false;
@@ -990,15 +991,15 @@ namespace MCLauncher {
                 } catch (BadUpdateIdentityException) {
                     Debug.WriteLine("Download failed due to failure to fetch download URL");
                     MessageBox.Show(
-                        "Unable to fetch download URL for version." +
-                        (v.VersionType == VersionType.Beta ? "\nFor beta versions, please make sure your account is subscribed to the Minecraft beta programme in the Xbox Insider Hub app." : "")
+                        "无法获取版本的下载URL." +
+                        (v.VersionType == VersionType.Beta ? "\n对于测试版，请确保您的帐户已订阅Xbox Insider Hub应用程序中的Minecraft测试版计划." : "")
                     );
                     v.StateChangeInfo = null;
                     return;
                 } catch (Exception e) {
                     Debug.WriteLine("Download failed:\n" + e.ToString());
                     if (!(e is TaskCanceledException))
-                        MessageBox.Show("Download failed:\n" + e.ToString());
+                        MessageBox.Show("下载失败:\n" + e.ToString());
                     v.StateChangeInfo = null;
                     return;
                 }
@@ -1021,7 +1022,7 @@ namespace MCLauncher {
                     }
                 } catch (Exception e) {
                     Debug.WriteLine("Extraction failed:\n" + e.ToString());
-                    MessageBox.Show("Extraction failed:\n" + e.ToString());
+                    MessageBox.Show("提取失败:\n" + e.ToString());
                     v.StateChangeInfo = null;
                     return;
                 }
@@ -1038,7 +1039,7 @@ namespace MCLauncher {
                     await UnregisterPackage(v.GamePackageFamily, v, skipBackup: false);
                 } catch (Exception e) {
                     Debug.WriteLine("Failed unregistering package:\n" + e.ToString());
-                    MessageBox.Show("Failed unregistering package:\n" + e.ToString(), "Uninstall error");
+                    MessageBox.Show("解除注册程序包失败:\n" + e.ToString(), "Uninstall error");
                     return false;
                 }
                 Debug.WriteLine("Cleaning up game files for version " + v.DisplayName);
@@ -1048,7 +1049,7 @@ namespace MCLauncher {
                     Directory.Delete(@"\\?\" + Path.GetFullPath(v.GameDirectory), true);
                 } catch (Exception e) {
                     Debug.WriteLine("Failed deleting game directory:\n" + e.ToString());
-                    MessageBox.Show("Failed deleting game directory:\n" + e.ToString(), "Uninstall error");
+                    MessageBox.Show("删除游戏目录失败:\n" + e.ToString(), "Uninstall error");
                     return false;
                 }
 
@@ -1095,7 +1096,7 @@ namespace MCLauncher {
 
         private void MenuItemOpenLogFileClicked(object sender, RoutedEventArgs e) {
             if (!File.Exists(@"Log.txt")) {
-                MessageBox.Show("Log file not found", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("日志文件未找到", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             } else 
                 Process.Start(@"Log.txt");
         }
@@ -1106,10 +1107,10 @@ namespace MCLauncher {
 
         private void MenuItemUninstallAllVersionsClicked(object sender, RoutedEventArgs e) {
             var result = MessageBox.Show(
-                "All versions of Minecraft managed by the launcher will be unregistered and deleted.\n" +
-                    "Your data (worlds, etc.) won't be removed.\n\n" +
-                    "Note: If you just want to reinstall Minecraft from the Store, and don't want to delete your launcher-managed versions, you can use the \"Cleanup for Store reinstall\" option instead.\n\n" +
-                    "Are you sure you want to continue?",
+                "启动器管理的所有Minecraft版本都将被注销和删除.\n" +
+                    "您的数据（世界等）不会被删除.\n\n" +
+                    "注意：如果您只想从应用商店重新安装《我的世界》，并且不想删除启动器管理的版本，则可以使用“清理以重新安装应用商店”选项.\n\n" +
+                    "您确定要继续吗?",
                 "Uninstall all versions",
                 MessageBoxButton.OKCancel
             );
@@ -1163,7 +1164,7 @@ namespace MCLauncher {
             MessageBox.Show(
                 buildDataLocationMessage("Release", MinecraftPackageFamilies.MINECRAFT) + "\n\n" +
                 buildDataLocationMessage("Preview", MinecraftPackageFamilies.MINECRAFT_PREVIEW) + "\n\n" +
-                "Note: Data folders containing no worlds are not shown.",
+                "注意：不显示不包含世界的数据文件夹.",
                 "Minecraft data locations"
             );
         }
@@ -1186,12 +1187,12 @@ namespace MCLauncher {
                 await UnregisterPackage(MinecraftPackageFamilies.MINECRAFT_PREVIEW, null, skipBackup: false);
             } catch (Exception ex) {
                 Debug.WriteLine("Error cleaning up: " + ex.Message);
-                MessageBox.Show("An error occurred while cleaning up. Check the log for details.", "Error");
+                MessageBox.Show("清理时出错。查看日志以了解详细信息.", "Error");
             }
             Debug.WriteLine("Done cleaning up");
             allowClose = true;
             dialog.Close();
-            MessageBox.Show("Cleanup completed. You should now be able to install Minecraft from Microsoft Store.", "Cleanup completed");
+            MessageBox.Show("清理已完成。您现在应该可以从Microsoft Store安装Minecraft了.", "Cleanup completed");
         }
 
         private void ShowBetaTabOption_Changed(object sender, RoutedEventArgs e) {

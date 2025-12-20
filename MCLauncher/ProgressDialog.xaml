@@ -10,7 +10,7 @@
         SizeToContent="WidthAndHeight"
         MinWidth="400"
         WindowStartupLocation="CenterOwner"
-        Title="Cleanup for Microsoft Store install">
+        Title="清理Microsoft Store的安装">
     <Grid Margin="5,5,5,5">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -24,7 +24,7 @@
             <ColumnDefinition />
         </Grid.ColumnDefinitions>
 
-        <Label Content="Cleaning up system for installing Minecraft from Microsoft Store..." Grid.Row="0" Grid.Column="0" Padding="0,0,0,5" />
+        <Label Content="正在清理从Microsoft Store安装的Minecraft..." Grid.Row="0" Grid.Column="0" Padding="0,0,0,5" />
         <ProgressBar Name="progressBar" Grid.Row="1" Grid.Column="0" Height="20" Grid.ColumnSpan="2" IsIndeterminate="True"/>
     </Grid>
 </Window>
