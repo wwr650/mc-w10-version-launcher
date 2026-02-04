@@ -1,6 +1,12 @@
 # MCLauncher
 
+<<<<<<< HEAD
    [English](README.md) | [中文](README_zh-CN.md)
+=======
+<div align="left">
+   [English](README.md) | [中文](README_zh-CN.md)
+</div>
+>>>>>>> ac15b6594458e98b7c8793e26f0640449f64f637
 
 该工具允许您在同一台电脑上并行安装多个版本的《我的世界：Windows 10版》（基岩版）。
 这对于需要并行测试测试版、正式版或其他版本，而无需反复卸载和重装游戏的情况非常实用。
