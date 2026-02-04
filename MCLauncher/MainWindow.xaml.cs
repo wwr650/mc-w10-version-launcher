@@ -823,25 +823,57 @@ namespace MCLauncher {
                 return true;
             }
 
+            string gdkRoot = GetMinecraftGDKRootDir(packageFamily);
+            string uwpDataDir = GetMinecraftUWPDataDir(packageFamily);
+
             if (dataLocations.Count > 1) {
                 var messageString = "";
                 foreach (var loc in dataLocations) {
                     messageString += $"\n - {loc.Key}: {loc.Value} worlds";
                 }
+
+                //GDK might put worlds in several places, but this is fine as long as the target version is also GDK
+                if (destinationType == PackageType.GDK) {
+                    Debug.WriteLine("Checking for dirs with prefix: " + gdkRoot);
+                    bool gdkOnly = true;
+                    foreach (var loc in dataLocations) {
+                        if (!loc.Key.StartsWith(gdkRoot)) {
+                            gdkOnly = false;
+                            Debug.WriteLine("Folder " + loc.Key + " doesn't start with " + gdkRoot);
+                            break;
+                        } else {
+                            Debug.WriteLine("Folder " + loc.Key + " is in GDK data, ignoring");
+                        }
+                    }
+
+                    if (gdkOnly) {
+                        Debug.WriteLine("Worlds found in multiple places, but all of them are GDK:" + messageString);
+                        Debug.WriteLine("This is fine since the target version is also GDK, doing nothing");
+                        return true;
+                    }
+                }
+
                 Debug.WriteLine("Can't automatically restore Minecraft data - multiple locations with worlds found:" + messageString);
-                MessageBox.Show(
-                    "无法为UWP自动恢复Minecraft世界，因为找到了多个具有世界的位置:"
+
+                string destinationFolder = destinationType == PackageType.UWP ? uwpDataDir : Path.Combine(gdkRoot, "Users");
+                //TODO: we could allow this to proceed anyway, with a warning instead of an error?
+                var result = MessageBox.Show(
+                    "在多个位置发现了世界，发射器不知道该用哪个.\n"
                         + messageString
-                        + "\n\n请通过将世界复制到所需位置手动解决冲突.",
-                    "Data restore error"
+                        + "\n\n您尝试启动的版本将在中查找您的世界: " + destinationFolder
+                        + "\n\n请通过将世界复制到所需位置手动解决冲突."
+                        + "\n\n或者，您可以继续启动，但请注意，您的一些世界可能对游戏不可见."
+                        + "\n您仍然想继续吗?",
+                    "Data restore error",
+                    MessageBoxButton.OKCancel
                 );
-                return false;
+                return result == MessageBoxResult.OK;
             }
 
             string dataLocation = dataLocations.Keys.First();
 
             string tmpDir = GetBackupMinecraftDataDir();
-            string uwpDataDir = GetMinecraftUWPDataDir(packageFamily);
+
             string uwpParent = GetMinecraftUWPRootDir(packageFamily);
             if (dataLocation == tmpDir) {
                 //we don't know where GDK will want to store this due to the user folder names containing some kind of UID
