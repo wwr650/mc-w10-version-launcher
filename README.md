@@ -1,11 +1,13 @@
 # MCLauncher
 
+   [English](README.md) | [中文](README_zh-CN.md)
+
 This tool allows you to install several versions of Minecraft: Windows 10 Edition (Bedrock) side-by-side.
 This is useful if you want to test beta versions, releases or anything else side-by-side without needing to uninstall and reinstall the game.
 
-## translation--简中翻译zh-cn
+## translation--zh-cn
 
-对UI进行翻译（大多为机翻，语意可能不太准，但不影响使用）。
+Translate the UI (mostly machine translated, the meaning may not be accurate, but it does not affect usage).
 
 ## Disclaimer
 
@@ -34,4 +36,3 @@ The project should build out of the box with VS as long as you haven't done anyt
 **Does this allow running multiple instances of Minecraft: Bedrock at the same time?**
 
 At the time of writing, no. It allows you to _install_ multiple versions, but only one version can run at a time.
-
