@@ -38,7 +38,7 @@ namespace MCLauncher {
             CollectionChanged += versionListOnCollectionChanged;
         }
 
-        private void versionListOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e) {
+        private void versionListOnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) {
             if (e.OldItems != null) {
                 foreach (var item in e.OldItems) {
                     var version = item as WPFDataTypes.Version;
@@ -75,7 +75,7 @@ namespace MCLauncher {
                     downloadUrls.Add(url.Value<string>());
                 }
                 if (downloadUrls.Count == 0) {
-                    Debug.WriteLine("Not showing version " + versionName + " because it has no download URLs");
+                    Trace.WriteLine("Not showing version " + versionName + " because it has no download URLs");
                     continue;
                 }
                 bool exists = !dbVersions.Add(versionName);

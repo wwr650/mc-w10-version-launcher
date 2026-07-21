@@ -1,0 +1,75 @@
+{
+  "format": 1,
+  "restore": {
+    "F:\\github_project\\mc-w10-version-launcher\\MCLauncher\\MCLauncher.csproj": {}
+  },
+  "projects": {
+    "F:\\github_project\\mc-w10-version-launcher\\MCLauncher\\MCLauncher.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "F:\\github_project\\mc-w10-version-launcher\\MCLauncher\\MCLauncher.csproj",
+        "projectName": "MCLauncher",
+        "projectPath": "F:\\github_project\\mc-w10-version-launcher\\MCLauncher\\MCLauncher.csproj",
+        "packagesPath": "C:\\Users\\WWR65\\.nuget\\packages\\",
+        "outputPath": "F:\\github_project\\mc-w10-version-launcher\\MCLauncher\\obj\\",
+        "projectStyle": "PackageReference",
+        "skipContentFileWrite": true,
+        "UsingMicrosoftNETSdk": false,
+        "configFilePaths": [
+          "C:\\Users\\WWR65\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net48"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net48": {
+            "projectReferences": {}
+          }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net48": {
+          "dependencies": {
+            "Microsoft.Windows.SDK.Contracts": {
+              "target": "Package",
+              "version": "[10.0.17763.1000, )"
+            },
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            }
+          },
+          "imports": [
+            "uap10.0.17763"
+          ],
+          "assetTargetFallback": true,
+          "warn": true
+        }
+      },
+      "runtimes": {
+        "win": {
+          "#import": []
+        },
+        "win-arm64": {
+          "#import": []
+        },
+        "win-x64": {
+          "#import": []
+        },
+        "win-x86": {
+          "#import": []
+        }
+      }
+    }
+  }
+}
