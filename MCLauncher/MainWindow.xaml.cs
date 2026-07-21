@@ -11,8 +11,11 @@ namespace MCLauncher {
     using System.IO;
     using System.IO.Compression;
     using System.Linq;
+    using System.Runtime.InteropServices;
+    using System.Text;
     using System.Threading;
     using System.Windows.Data;
+    using System.Xml;
     using System.Xml.Linq;
     using Windows.ApplicationModel;
     using Windows.Foundation;
@@ -20,14 +23,14 @@ namespace MCLauncher {
     using Windows.Management.Deployment;
     using Windows.Storage;
     using Windows.System;
-    using Windows.UI.Xaml.Controls;
     using WPFDataTypes;
 
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window, ICommonVersionCommands {
-
+        private const string GDK_SHIM_NAME = @"GDKLaunchShim.exe";
+        private const string GDK_DECRYPT_HELPER_NAME = @"GDKDecryptHelper.exe";
         private static readonly string PREFS_PATH = @"preferences.json";
         private static readonly string IMPORTED_VERSIONS_PATH = @"imported_versions";
         private static readonly string VERSIONS_API_UWP = "https://mrarm.io/r/w10-vdb";
@@ -46,11 +49,15 @@ namespace MCLauncher {
         private volatile bool _hasGdkExtractTask = false;
 
         public MainWindow() {
+            Preferences? userPrefs = null;
             if (File.Exists(PREFS_PATH)) {
-                UserPrefs = JsonConvert.DeserializeObject<Preferences>(File.ReadAllText(PREFS_PATH));
-            } else {
+                userPrefs = JsonConvert.DeserializeObject<Preferences>(File.ReadAllText(PREFS_PATH));
+            }
+            if (userPrefs == null) {
                 UserPrefs = new Preferences();
                 RewritePrefs();
+            } else {
+                UserPrefs = userPrefs;
             }
 
             var versionsApiUWP = UserPrefs.VersionsApiUWP != "" ? UserPrefs.VersionsApiUWP : VERSIONS_API_UWP;
@@ -58,6 +65,7 @@ namespace MCLauncher {
             _versions = new VersionList("versions_uwp.json", IMPORTED_VERSIONS_PATH, versionsApiUWP, this, VersionEntryPropertyChanged, "versions_gdk.json", versionsApiGDK);
 
             InitializeComponent();
+            DeleteAppxAfterDownloadOption.DataContext = this;
             ShowInstalledVersionsOnlyCheckbox.DataContext = this;
 
             var versionListViewRelease = Resources["versionListViewRelease"] as CollectionViewSource;
@@ -114,7 +122,7 @@ namespace MCLauncher {
             try {
                 await _versions.LoadFromCacheGDK();
             } catch (Exception e) {
-                Debug.WriteLine("List cache load failed:\n" + e.ToString());
+                Trace.WriteLine("List cache load failed:\n" + e.ToString());
             }
 
             LoadingProgressLabel.Content = "从缓存加载UWP版本";
@@ -122,7 +130,7 @@ namespace MCLauncher {
             try {
                 await _versions.LoadFromCacheUWP();
             } catch (Exception e) {
-                Debug.WriteLine("List cache load failed:\n" + e.ToString());
+                Trace.WriteLine("List cache load failed:\n" + e.ToString());
             }
 
             _versions.PrepareForReload();
@@ -133,7 +141,7 @@ namespace MCLauncher {
                 await _versions.DownloadVersionsGDK();
             } catch (Exception e) {
                 Debug.WriteLine("List download failed:\n" + e.ToString());
-                MessageBox.Show("无法从网络更新版本列表。可能缺少一些新版本.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to update version list from the internet. Some new versions might be missing.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
 
 
@@ -143,7 +151,7 @@ namespace MCLauncher {
                 await _versions.DownloadVersionsUWP();
             } catch (Exception e) {
                 Debug.WriteLine("List download failed:\n" + e.ToString());
-                MessageBox.Show("无法从网络更新版本列表。可能缺少一些新版本.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to update version list from the internet. Some new versions might be missing.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
 
             LoadingProgressLabel.Content = "正在加载导入的版本";
@@ -153,7 +161,7 @@ namespace MCLauncher {
             LoadingProgressGrid.Visibility = Visibility.Collapsed;
         }
 
-        private void VersionEntryPropertyChanged(object sender, PropertyChangedEventArgs e) {
+        private void VersionEntryPropertyChanged(object? sender, PropertyChangedEventArgs e) {
             RefreshLists();
         }
 
@@ -162,6 +170,7 @@ namespace MCLauncher {
             openFileDlg.Filter = "XVC and APPX packages (*.msixvc, *.appx)|*.msixvc;*.appx|APPX packages (*.appx)|*.appx|XVC packages (*.msixvc)|*.msixvc|All Files|*.*";
             Nullable<bool> result = openFileDlg.ShowDialog();
             if (result == true) {
+                Directory.CreateDirectory(IMPORTED_VERSIONS_PATH);
                 string directory = Path.Combine(IMPORTED_VERSIONS_PATH, openFileDlg.SafeFileName);
                 if (Directory.Exists(directory)) {
                     var found = false;
@@ -231,13 +240,13 @@ namespace MCLauncher {
             }
         }
 
-        private void InstallError(string userMessage, string debug, string fileName, Exception ex) {
+        private void InstallError(string userMessage, string debug, string fileName, Exception? ex) {
             string exceptionMessage = "none";
             if (ex != null) {
-                Debug.WriteLine(debug + ": " + ex.ToString());
+                Trace.WriteLine(debug + ": " + ex.ToString());
                 exceptionMessage = ex.Message;
             } else {
-                Debug.WriteLine(debug);
+                Trace.WriteLine(debug);
             }
 
             MessageBox.Show(
@@ -275,18 +284,18 @@ namespace MCLauncher {
         private bool ShowGDKFirstUseWarning() {
             if (!UserPrefs.HasPreviouslyUsedGDK) {
                 var result = MessageBox.Show(
-                    "启动器检测到这是您第一次在此启动器中使用GDK版本的Minecraft.\n" +
-                        "请注意以下事项:\n\n" +
-                        "在尝试使用GDK版本的启动器之前，您必须从应用商店安装GDK版的Minecraft.\n" +
-                        "这是因为启动器需要应用商店安装密钥来解密安装包.\n" +
-                        "如果不这样做，安装包可能会显示损坏消息.\n\n" +
-                        "强烈建议在Windows Defender中为C:\\XboxGames（或默认情况下安装游戏的任何地方）添加排除项, " +
-                        "否则，安装过程将花费10倍的时间.\n\n" +
-                        "在安装过程中，您将看到几个对话框和一个PowerShell窗口短暂弹出.\n" +
-                        "这是正常的，是GDK版本使用的安装方法不可避免的结果.\n\n" +
-                        "另请注意，从UWP移动到GDK时，您的世界的位置会发生变化，反之亦然.\n" +
-                        "如果你找不到你的世界，你可以使用工具->“查找我的数据”来定位它们.",
-                    "Minecraft GDK警告",
+                    "The launcher has detected that this is your first time using a GDK version of Minecraft in this launcher.\n" +
+                        "Please be aware of the following:\n\n" +
+                        "You MUST install a GDK version of Minecraft from the Store before attempting to use the launcher for GDK versions.\n" +
+                        "This is because the launcher needs the Store to install the keys to decrypt the installation packages.\n" +
+                        "If you don't, the installation packages may show corruption messages.\n\n" +
+                        "It is STRONGLY recommended to add an exclusion for C:\\XboxGames (or wherever your games install by default) to Windows Defender, " +
+                        "otherwise the installation process will take 10x as long.\n\n" +
+                        "During installation, you will see a few dialog boxes and a PowerShell window briefly pop up.\n" +
+                        "This is normal and is an unavoidable consequence of the installation method used for GDK versions.\n\n" +
+                        "Please also note that the location of your worlds will change when moving from UWP to GDK and vice versa.\n" +
+                        "If you can't find your worlds, you can use Tools -> \"Find my data\" to locate them.",
+                    "Minecraft GDK warning",
                     MessageBoxButton.OKCancel
                 );
                 if (result == MessageBoxResult.OK) {
@@ -308,8 +317,9 @@ namespace MCLauncher {
             var apps = doc.Descendants(ns + "Application");
             foreach (var app in apps) {
                 var executable = app.Attribute("Executable");
-                if (executable != null && executable.Value == "GameLaunchHelper.exe") {
-                    executable.Value = "Minecraft.Windows.exe";
+                //install from older versions will reference the minecraft exe directly, so we need to patch these
+                if (executable != null && (executable.Value == "GameLaunchHelper.exe" || executable.Value == "Minecraft.Windows.exe")) {
+                    executable.Value = GDK_SHIM_NAME;
                 }
             }
 
@@ -327,7 +337,12 @@ namespace MCLauncher {
                 cap.Remove();
             }
 
-            doc.Save(path);
+            var settings = new XmlWriterSettings();
+            settings.Encoding = new UTF8Encoding(false); //no BOM
+            settings.Indent = true;
+            using (XmlWriter w = XmlWriter.Create(path, settings)) {
+                doc.Save(w);
+            }
         }
 
 
@@ -338,7 +353,7 @@ namespace MCLauncher {
                     continue;
                 }
                 string destination = Path.Combine(to, Path.GetFileName(source));
-                Debug.WriteLine(source + " -> " + destination);
+                Trace.WriteLine(source + " -> " + destination);
                 File.Copy(source, destination);
             }
             foreach (var source in Directory.EnumerateDirectories(from)) {
@@ -368,7 +383,7 @@ namespace MCLauncher {
                 var packageManager = new PackageManager();
 
                 //make sure XboxGames is cleared
-                Debug.WriteLine("Clearing existing XboxGames Minecraft installation");
+                Trace.WriteLine("Clearing existing XboxGames Minecraft installation");
                 try {
                     await UnregisterPackage(versionEntry.GamePackageFamily, versionEntry, skipBackup: false);
                 } catch (Exception ex) {
@@ -411,9 +426,9 @@ namespace MCLauncher {
                     }
                     installPath = pkg.InstalledLocation.Path;
                 }
-                Debug.WriteLine("Detected staging path: " + installPath);
+                Trace.WriteLine("Detected staging path: " + installPath);
                 string resolvedPath = LinkResolver.Resolve(installPath);
-                Debug.WriteLine("Symlink resolved as " + resolvedPath);
+                Trace.WriteLine("Symlink resolved as " + resolvedPath);
                 installPath = resolvedPath;
 
                 var exeSrcPath = Path.Combine(installPath, "Minecraft.Windows.exe");
@@ -438,36 +453,26 @@ namespace MCLauncher {
 
                 versionEntry.StateChangeInfo.VersionState = VersionState.Decrypting;
 
-                var exeTmpDir = Path.GetFullPath(@"tmp");
-                if (!Directory.Exists(exeTmpDir)) {
-                    try {
-                        Directory.CreateDirectory(exeTmpDir);
-                    } catch (IOException ex) {
-                        InstallError(
-                            "The temporary directory for extracting the Minecraft executable could not be created at " + exeTmpDir,
-                            "Failed to create tmp dir for exe extraction: " + exeTmpDir,
-                            filePath,
-                            ex
-                        );
-                        return false;
-                    }
-                }
+                var exeTmpDir = Path.GetTempPath();
                 var uuid = Guid.NewGuid().ToString();
                 //Use a different tmp path to make sure we don't copy half-done files
                 //UUID makes sure we don't copy the leftovers of a different, failed installation
                 var exeTmpPath = Path.Combine(exeTmpDir, "Minecraft.Windows_" + uuid + ".exe");
-                var exePartialTmpPath = exeTmpPath + ".tmp";
+                var donePath = exeTmpPath + ".done";
 
                 var exeDstPath = Path.Combine(Path.GetFullPath(directory), "Minecraft.Windows.exe");
+                var decryptHelperLogFile = Path.GetTempFileName();
+
+                var helperPath = Path.Combine(Directory.GetCurrentDirectory(), GDK_DECRYPT_HELPER_NAME);
 
                 //TODO: these paths probably need to be escaped
                 var command = $@"Invoke-CommandInDesktopPackage `
                             -PackageFamilyName ""{versionEntry.GamePackageFamily}"" `
                             -App Game `
-                            -Command ""powershell.exe"" `
-                            -Args \""-Command Copy-Item '{exeSrcPath}' '{exePartialTmpPath}' -Force; Move-Item '{exePartialTmpPath}' '{exeTmpPath}'\""
+                            -Command \""{helperPath}\"" `
+                            -Args '\""{exeSrcPath}\"" \""{exeTmpPath}\"" \""{decryptHelperLogFile}\"" \""{donePath}\""'
                         ";
-                Debug.WriteLine("Decrypt command: " + command);
+                Trace.WriteLine("Decrypt command: " + command);
 
                 var processInfo = new ProcessStartInfo {
                     FileName = "powershell.exe",
@@ -478,13 +483,14 @@ namespace MCLauncher {
                     UseShellExecute = false
                 };
 
-                Debug.WriteLine("Copying decrypted exe");
+                Trace.WriteLine("Copying decrypted exe");
                 try {
                     var process = Process.Start(processInfo);
                     process.WaitForExit();
-                    Debug.WriteLine("Process output:" + process.StandardOutput.ReadToEnd());
-                    Debug.WriteLine("Process errors:" + process.StandardError.ReadToEnd());
+                    Trace.WriteLine("Process output:" + process.StandardOutput.ReadToEnd());
+                    Trace.WriteLine("Process errors:" + process.StandardError.ReadToEnd());
                 } catch (Exception ex) {
+                    Trace.WriteLine("Decrypt helper log output: " + File.ReadAllText(decryptHelperLogFile));
                     InstallError(
                         "Failed to run PowerShell to copy the Minecraft executable out of the staged package",
                         "Failed running PowerShell for exe extraction",
@@ -494,16 +500,18 @@ namespace MCLauncher {
                     return false;
                 }
 
-                for (int i = 0; i < 300 && !File.Exists(exeTmpPath); i++) {
+                for (int i = 0; i < 300 && !File.Exists(donePath); i++) {
                     //Give it up to 30 seconds to copy the file
                     //We can't block on the outcome of Invoke-CommandInDesktopPackage, so we have to poll for the file
                     //TODO: What if the copy takes longer than that?
                     await Task.Delay(100);
                 }
 
+                Trace.WriteLine("Decrypt helper log output: " + File.ReadAllText(decryptHelperLogFile));
+
                 if (!File.Exists(exeTmpPath)) {
-                    Debug.WriteLine("Src path: " + exeSrcPath);
-                    Debug.WriteLine("Tmp path: " + exeTmpPath);
+                    Trace.WriteLine("Src path: " + exeSrcPath);
+                    Trace.WriteLine("Tmp path: " + exeTmpPath);
                     InstallError(
                         "The Minecraft executable could not be copied out of the staged package.\n" +
                             "This is usually due to the game license not being installed for your Windows user account.\n\n" +
@@ -514,17 +522,17 @@ namespace MCLauncher {
                     );
                     return false;
                 }
-                Debug.WriteLine("Minecraft executable decrypted successfully");
+                Trace.WriteLine("Minecraft executable decrypted successfully");
 
                 versionEntry.StateChangeInfo.VersionState = VersionState.Moving;
                 //TODO: this could fail if the launcher is on a different drive than C: ?
                 try {
-                    Debug.WriteLine("Moving staged files: " + installPath + " -> " + directory);
+                    Trace.WriteLine("Moving staged files: " + installPath + " -> " + directory);
                     if (Path.GetPathRoot(installPath) == Path.GetPathRoot(directory)) {
-                        Debug.WriteLine("Destination for extraction is on the same drive as the installation location - moving files for speed");
+                        Trace.WriteLine("Destination for extraction is on the same drive as the installation location - moving files for speed");
                         Directory.Move(installPath, directory);
                     } else {
-                        Debug.WriteLine("Destination for extraction is on a different drive than staged - copying files");
+                        Trace.WriteLine("Destination for extraction is on a different drive than staged - copying files");
                         //Minecraft.Windows.exe can't be copied directly due to permissions
                         HashSet<string> skip = new HashSet<string>();
                         skip.Add(exeSrcPath);
@@ -532,7 +540,7 @@ namespace MCLauncher {
                     }
 
 
-                    Debug.WriteLine("Moving decrypted exe into place");
+                    Trace.WriteLine("Moving decrypted exe into place");
                     File.Delete(exeDstPath);
                     File.Move(exeTmpPath, exeDstPath);
                 } catch (Exception ex) {
@@ -545,11 +553,11 @@ namespace MCLauncher {
                     return false;
                 }
 
-                Debug.WriteLine("Cleaning up XboxGames");
+                Trace.WriteLine("Cleaning up XboxGames");
                 //we already created a backup earlier, so a new attempt would just get in the way
                 await UnregisterPackage(versionEntry.GamePackageFamily, versionEntry, skipBackup: true);
 
-                Debug.WriteLine("Done importing msixvc: " + filePath);
+                Trace.WriteLine("Done importing msixvc: " + filePath);
                 return true;
 
             } finally {
@@ -570,7 +578,7 @@ namespace MCLauncher {
             Task.Run(async () => {
                 v.StateChangeInfo = new VersionStateChangeInfo(VersionState.MovingData);
                 if (!MoveMinecraftData(v.GamePackageFamily, v.PackageType)) {
-                    Debug.WriteLine("Data restore error, aborting launch");
+                    Trace.WriteLine("Data restore error, aborting launch");
                     v.StateChangeInfo = null;
                     _hasLaunchTask = false;
                     return;
@@ -581,40 +589,30 @@ namespace MCLauncher {
                     await ReRegisterPackage(v.GamePackageFamily, gameDir, v);
                 } catch (Exception e) {
                     Debug.WriteLine("App re-register failed:\n" + e.ToString());
-                    MessageBox.Show("App重新注册失败:\n" + e.ToString());
+                    MessageBox.Show("App re-register failed:\n" + e.ToString());
                     _hasLaunchTask = false;
                     v.StateChangeInfo = null;
                     return;
                 }
                 v.StateChangeInfo = new VersionStateChangeInfo(VersionState.Launching);
                 try {
-                    if (v.PackageType == PackageType.GDK) {
-                        //Although we register the package (so it shows in Start Menu), the game has
-                        //to be run as a regular win32 app so it can setup its COM interfaces, which
-                        //it can't do if run in an app container. So, the start menu entry won't work
-                        //until the .exe is run directly.
-                        //Technically this is only necessary on the first run, but we don't track whether
-                        //a version was run before, so we'll just do it every time.
-                        await Task.Run(() => Process.Start(Path.Combine(gameDir, "Minecraft.Windows.exe")));
-                    } else {
-                        var pkg = await AppDiagnosticInfo.RequestInfoForPackageAsync(v.GamePackageFamily);
-                        if (pkg.Count > 0) {
-                            if (pkg.Count > 1) {
-                                Debug.WriteLine("Multiple packages found ???");
-                            }
-                            var result = await pkg[0].LaunchAsync();
-                            if (result.ExtendedError != null) {
-                                Debug.WriteLine("LaunchAsync didn't throw, but returned an extended error???");
-                                throw result.ExtendedError;
-                            }
-                        } else {
-                            throw new Exception("No packages found for package family " + v.GamePackageFamily);
+                    var pkg = await AppDiagnosticInfo.RequestInfoForPackageAsync(v.GamePackageFamily);
+                    if (pkg.Count > 0) {
+                        if (pkg.Count > 1) {
+                            Trace.WriteLine("Multiple packages found ???");
                         }
+                        var result = await pkg[0].LaunchAsync();
+                        if (result.ExtendedError != null) {
+                            Trace.WriteLine("LaunchAsync didn't throw, but returned an extended error???");
+                            throw result.ExtendedError;
+                        }
+                    } else {
+                        throw new Exception("No packages found for package family " + v.GamePackageFamily);
                     }
-                    Debug.WriteLine("App launch finished!");
+                    Trace.WriteLine("App launch finished!");
                 } catch (Exception e) {
                     Debug.WriteLine("App launch failed:\n" + e.ToString());
-                    MessageBox.Show("App启动失败:\n" + e.ToString());
+                    MessageBox.Show("App launch failed:\n" + e.ToString());
                     return;
                 } finally {
                     _hasLaunchTask = false;
@@ -623,17 +621,17 @@ namespace MCLauncher {
             });
         }
 
-        private async Task DeploymentProgressWrapper(IAsyncOperationWithProgress<DeploymentResult, DeploymentProgress> t, Version version) {
+        private async Task DeploymentProgressWrapper(IAsyncOperationWithProgress<DeploymentResult, DeploymentProgress> t, Version? version) {
             TaskCompletionSource<int> src = new TaskCompletionSource<int>();
             t.Progress += (v, p) => {
-                Debug.WriteLine("Deployment progress: " + p.state + " " + p.percentage + "%");
+                Trace.WriteLine("Deployment progress: " + p.state + " " + p.percentage + "%");
             };
             t.Completed += (v, p) => {
                 if (p == AsyncStatus.Error) {
-                    Debug.WriteLine("Deployment failed: " + v.GetResults().ErrorText + " (error code " + v.GetResults().ExtendedErrorCode.HResult + ")");
+                    Trace.WriteLine("Deployment failed: " + v.GetResults().ErrorText + " (error code " + v.GetResults().ExtendedErrorCode.HResult + ")");
                     src.SetException(new Exception("Deployment failed: " + v.GetResults().ErrorText));
                 } else {
-                    Debug.WriteLine("Deployment done: " + p);
+                    Trace.WriteLine("Deployment done: " + p);
                     src.SetResult(1);
                 }
             };
@@ -661,18 +659,18 @@ namespace MCLauncher {
 
             var worldLocations = new Dictionary<string, int>();
             foreach(var dataDir in candidates) {
-                Debug.WriteLine("Checking for worlds in: " + dataDir);
+                Trace.WriteLine("Checking for worlds in: " + dataDir);
                 var worldsFolder = Path.Combine(dataDir, "games", "com.mojang", "minecraftWorlds");
                 if (!Directory.Exists(worldsFolder)) {
-                    Debug.WriteLine("No worlds found in: " + worldsFolder);
+                    Trace.WriteLine("No worlds found in: " + worldsFolder);
                     continue;
                 }
                 int worlds = Directory.GetDirectories(worldsFolder).Length;
                 if (worlds > 0) {
                     worldLocations[dataDir] = worlds;
-                    Debug.WriteLine("Found " + worlds + " worlds in: " + worldsFolder);
+                    Trace.WriteLine("Found " + worlds + " worlds in: " + worldsFolder);
                 } else {
-                    Debug.WriteLine("No worlds found in: " + worldsFolder);
+                    Trace.WriteLine("No worlds found in: " + worldsFolder);
                 }
             }
 
@@ -724,7 +722,7 @@ namespace MCLauncher {
             var results = new List<string>();
 
             if (!Directory.Exists(parentDir)) {
-                Debug.WriteLine("GDK Users directory doesn't exist: " + parentDir);
+                Trace.WriteLine("GDK Users directory doesn't exist: " + parentDir);
                 return results;
             }
 
@@ -738,13 +736,13 @@ namespace MCLauncher {
             try {
                 data = ApplicationDataManager.CreateForPackageFamily(packageFamily);
             }catch (FileNotFoundException e) {
-                Debug.WriteLine("BackupMinecraftDataForRemoval: Application data not found for package family " + packageFamily + ": " + e.ToString());
-                Debug.WriteLine("This should mean the package isn't installed, so we don't need to backup the data");
+                Trace.WriteLine("BackupMinecraftDataForRemoval: Application data not found for package family " + packageFamily + ": " + e.ToString());
+                Trace.WriteLine("This should mean the package isn't installed, so we don't need to backup the data");
                 return true;
             }
             if (!Directory.Exists(data.LocalFolder.Path)) {
                 //this is fine only for GDK versions
-                Debug.WriteLine("LocalState folder " + data.LocalFolder.Path + " doesn't exist, so it can't be backed up");
+                Trace.WriteLine("LocalState folder " + data.LocalFolder.Path + " doesn't exist, so it can't be backed up");
                 return true;
             }
             string tmpDir = GetBackupMinecraftDataDir();
@@ -752,14 +750,14 @@ namespace MCLauncher {
                 if (GetWorldCountInDataDir(tmpDir) > 0) {
                     //TODO: this might happen if two different versions
                     //try to be uninstalled at the same time???
-                    Debug.WriteLine("BackupMinecraftDataForRemoval error: " + tmpDir + " already exists");
+                    Trace.WriteLine("BackupMinecraftDataForRemoval error: " + tmpDir + " already exists");
                     Process.Start("explorer.exe", tmpDir);
                     MessageBox.Show("用于备份MC数据的临时目录已存在。这可能意味着我们上次备份数据失败了。请手动备份目录.");
                     return false;
                 }
                 Directory.Delete(tmpDir, recursive: true);
             }
-            Debug.WriteLine("Moving Minecraft data to: " + tmpDir);
+            Trace.WriteLine("Moving Minecraft data to: " + tmpDir);
             Directory.Move(data.LocalFolder.Path, tmpDir);
 
             return true;
@@ -787,25 +785,25 @@ namespace MCLauncher {
         }
 
         private bool RestoreUWPData(string src, string uwpDataDir, string uwpParent) {
-            Debug.WriteLine("Restoring Minecraft data from src dir " + src + " to " + uwpDataDir);
+            Trace.WriteLine("Restoring Minecraft data from src dir " + src + " to " + uwpDataDir);
             try {
                 if (Directory.Exists(uwpDataDir)) {
-                    Debug.WriteLine("Deleting: " + uwpDataDir);
+                    Trace.WriteLine("Deleting: " + uwpDataDir);
                     Directory.Delete(uwpDataDir, recursive: true);
                 }
                 if (!Directory.Exists(uwpParent)) {
-                    Debug.WriteLine("Creating parent dir: " + uwpParent);
+                    Trace.WriteLine("Creating parent dir: " + uwpParent);
                     Directory.CreateDirectory(uwpParent);
                 }
-                Debug.WriteLine("Restoring files");
+                Trace.WriteLine("Restoring files");
                 RestoreMove(src, uwpDataDir);
-                Debug.WriteLine("Deleting src dir: " + src);
+                Trace.WriteLine("Deleting src dir: " + src);
                 Directory.Delete(src, true);
-                Debug.WriteLine("Restore complete");
+                Trace.WriteLine("Restore complete");
                 return true;
             } catch (Exception e) {
                 Debug.WriteLine("Failed restoring Minecraft data from " + src + ": " + e.ToString());
-                MessageBox.Show("无法从\n"
+                MessageBox.Show("Failed to move Minecraft data from:\n"
                     + src
                     +"\n移动Minecraft数据\n"
                     + "到:\n"
@@ -819,9 +817,12 @@ namespace MCLauncher {
         private bool MoveMinecraftData(string packageFamily, PackageType destinationType) {
             var dataLocations = LocateMinecraftWorlds(packageFamily);
             if (dataLocations.Count == 0) {
-                Debug.WriteLine("No Minecraft data found to restore or link");
+                Trace.WriteLine("No Minecraft data found to restore or link");
                 return true;
             }
+
+            string gdkRoot = GetMinecraftGDKRootDir(packageFamily);
+            string uwpDataDir = GetMinecraftUWPDataDir(packageFamily);
 
             if (dataLocations.Count > 1) {
                 var messageString = "";
@@ -830,23 +831,23 @@ namespace MCLauncher {
                 }
                 Debug.WriteLine("Can't automatically restore Minecraft data - multiple locations with worlds found:" + messageString);
                 MessageBox.Show(
-                    "无法为UWP自动恢复Minecraft世界，因为找到了多个具有世界的位置:"
+                    "Unable to automatically restore Minecraft worlds for UWP, because multiple locations with worlds were found:"
                         + messageString
-                        + "\n\n请通过将世界复制到所需位置手动解决冲突.",
+                        + "\n\nPlease resolve the conflicts manually by copying worlds into the desired location.",
                     "Data restore error"
                 );
-                return false;
+                return result == MessageBoxResult.OK;
             }
 
             string dataLocation = dataLocations.Keys.First();
 
             string tmpDir = GetBackupMinecraftDataDir();
-            string uwpDataDir = GetMinecraftUWPDataDir(packageFamily);
+
             string uwpParent = GetMinecraftUWPRootDir(packageFamily);
             if (dataLocation == tmpDir) {
                 //we don't know where GDK will want to store this due to the user folder names containing some kind of UID
                 //so we restore to UWP location and let Minecraft handle the GDK migration by itself
-                Debug.WriteLine("Restoring Minecraft data from backup dir " + tmpDir + " to " + uwpDataDir);
+                Trace.WriteLine("Restoring Minecraft data from backup dir " + tmpDir + " to " + uwpDataDir);
                 if (!RestoreUWPData(tmpDir, uwpDataDir, uwpParent)) {
                     return false;
                 }
@@ -856,19 +857,19 @@ namespace MCLauncher {
             if (destinationType == PackageType.GDK && dataLocation == uwpDataDir) {
                 //TODO: not sure it's a good idea to let the game migrate UWP data on its own,
                 //considering how many people have had problems with it???
-                Debug.WriteLine("Deleting uwpMigration.dat, so GDK Minecraft will migrate data from UWP next time it's used");
+                Trace.WriteLine("Deleting uwpMigration.dat, so GDK Minecraft will migrate data from UWP next time it's used");
                 var uwpMigrationDat = Path.Combine(
                     GetMinecraftGDKRootDir(packageFamily),
                     "games",
                     "com.mojang",
                     "uwpMigration.dat"
                 );
-                Debug.WriteLine("uwpMigration.dat path: " + uwpMigrationDat);
+                Trace.WriteLine("uwpMigration.dat path: " + uwpMigrationDat);
                 try {
                     File.Delete(uwpMigrationDat);
                     return true;
                 } catch (Exception e) {
-                    Debug.WriteLine("Failed deleting uwpMigration.dat: " + e.ToString());
+                    Trace.WriteLine("Failed deleting uwpMigration.dat: " + e.ToString());
                     MessageBox.Show(
                         "删除uwpMigration.dat文件失败.\n" +
                         "您的世界将对UWP版本可见，但GDK版本将看不到它们，除非您手动将其移回.\n\n" +
@@ -888,13 +889,13 @@ namespace MCLauncher {
 
                 return true;
             } else {
-                Debug.WriteLine("Minecraft data already in the right place " + dataLocation);
+                Trace.WriteLine("Minecraft data already in the right place " + dataLocation);
                 return true;
             }
         }
 
-        private async Task RemovePackage(Package pkg, string packageFamily, Version version, bool skipBackup) {
-            Debug.WriteLine("Removing package: " + pkg.Id.FullName);
+        private async Task RemovePackage(Package pkg, string packageFamily, Version? version, bool skipBackup) {
+            Trace.WriteLine("Removing package: " + pkg.Id.FullName);
             if (!pkg.IsDevelopmentMode) {
                 if (!skipBackup) {
                     //TODO: It would be nice to skip this if we're uninstalling a GDK version
@@ -907,10 +908,10 @@ namespace MCLauncher {
                 //TODO: this will bomb data for other users. We only currently backup data for the current user
                 await DeploymentProgressWrapper(new PackageManager().RemovePackageAsync(pkg.Id.FullName, RemovalOptions.RemoveForAllUsers), version);
             } else {
-                Debug.WriteLine("Package is in development mode");
+                Trace.WriteLine("Package is in development mode");
                 await DeploymentProgressWrapper(new PackageManager().RemovePackageAsync(pkg.Id.FullName, RemovalOptions.PreserveApplicationData | RemovalOptions.RemoveForAllUsers), version);
             }
-            Debug.WriteLine("Removal of package done: " + pkg.Id.FullName);
+            Trace.WriteLine("Removal of package done: " + pkg.Id.FullName);
         }
 
         private string GetPackagePath(Package pkg) {
@@ -921,36 +922,78 @@ namespace MCLauncher {
             }
         }
 
-        private async Task UnregisterPackage(string packageFamily, Version version, bool skipBackup) {
+        private async Task UnregisterPackage(string packageFamily, Version? version, bool skipBackup) {
             foreach (var pkg in new PackageManager().FindPackages(packageFamily)) {
                 string location = GetPackagePath(pkg);
-                Debug.WriteLine("Removing package: " + pkg.Id.FullName + " " + location);
+                Trace.WriteLine("Removing package: " + pkg.Id.FullName + " " + location);
                 await RemovePackage(pkg, packageFamily, version, skipBackup);
             }
         }
 
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool CreateHardLink(
+            string lpFileName,
+            string lpExistingFileName,
+            IntPtr lpSecurityAttributes
+        );
+
         private async Task ReRegisterPackage(string packageFamily, string gameDir, Version version) {
+            Trace.WriteLine("Registering package");
+            string manifestPath = Path.Combine(gameDir, "AppxManifest.xml");
+
+            bool updateManifest = false;
+
+            if (version.PackageType == PackageType.GDK) {
+                string shimPath = Path.Combine(gameDir, GDK_SHIM_NAME);
+
+                string backupManifestPath = Path.Combine(gameDir, "AppxManifest_original.xml");
+                bool hasManifestBackup = File.Exists(backupManifestPath);
+
+                if (!File.Exists(shimPath)) {
+                    updateManifest = true;
+                    if (hasManifestBackup) {
+                        //we need to redo the manifest for older versions that didn't have the shim present
+                        File.Copy(backupManifestPath, manifestPath, overwrite: true);
+                        Trace.WriteLine("Manifest needs re-patching because GDK launch shim has been added to an old install");
+                    } else {
+                        Trace.WriteLine("Adding launch shim to new GDK install");
+                    }
+                } else {
+                    Trace.WriteLine("Updating GDK launch shim");
+                }
+
+                File.Delete(shimPath);
+                if (CreateHardLink(shimPath, GDK_SHIM_NAME, IntPtr.Zero)) {
+                    //hardlink is way less annoying for development, in theory
+                    Trace.WriteLine("Successfully hardlinked GDK launch shim");
+                } else {
+                    File.Copy(GDK_SHIM_NAME, shimPath, overwrite: true);
+                    Trace.WriteLine("Couldn't create hard link for GDK shim, copying instead");
+                }
+
+                //avoid patching the manifest unless necessary, the user might have edited it
+                if (updateManifest) {
+                    Trace.WriteLine("Patching AppxManifest.xml");
+                    if (!hasManifestBackup) {
+                        Trace.WriteLine("Backing up original manifest");
+                        File.Copy(manifestPath, backupManifestPath);
+                    }
+                    FixGDKManifest(manifestPath);
+                }
+            }
+
             foreach (var pkg in new PackageManager().FindPackages(packageFamily)) {
                 string location = GetPackagePath(pkg);
-                if (location == gameDir) {
-                    Debug.WriteLine("Skipping package removal - same path: " + pkg.Id.FullName + " " + location);
+                if (location == gameDir && !updateManifest) {
+                    Trace.WriteLine("Skipping package removal - same path: " + pkg.Id.FullName + " " + location);
                     return;
                 }
                 await RemovePackage(pkg, packageFamily, version, skipBackup: false);
             }
-            Debug.WriteLine("Registering package");
-            string manifestPath = Path.Combine(gameDir, "AppxManifest.xml");
 
-            if (version.PackageType == PackageType.GDK) {
-                string originalPath = Path.Combine(gameDir, "AppxManifest_original.xml");
-                if (!File.Exists(originalPath)) {
-                    File.Copy(manifestPath, originalPath);
-                    FixGDKManifest(manifestPath);
-                }
-            }
-            Debug.WriteLine("Manifest path: " + manifestPath);
+            Trace.WriteLine("Manifest path: " + manifestPath);
             await DeploymentProgressWrapper(new PackageManager().RegisterPackageAsync(new Uri(manifestPath), null, DeploymentOptions.DevelopmentMode), version);
-            Debug.WriteLine("App re-register done!");
+            Trace.WriteLine("App re-register done!");
         }
 
         private void InvokeDownload(Version v) {
@@ -959,14 +1002,14 @@ namespace MCLauncher {
             v.StateChangeInfo = new VersionStateChangeInfo(VersionState.Initializing);
             v.StateChangeInfo.CancelCommand = new RelayCommand((o) => cancelSource.Cancel());
 
-            Debug.WriteLine("Download start");
+            Trace.WriteLine("Download start");
             Task.Run(async () => {
                 string dlPath = Path.GetFullPath((v.VersionType == VersionType.Preview ? "Minecraft-Preview-" : "Minecraft-") + v.Name + (v.PackageType == PackageType.UWP ? ".Appx" : ".msixvc"));
                 VersionDownloader downloader = _anonVersionDownloader;
 
                 VersionDownloader.DownloadProgress dlProgressHandler = (current, total) => {
                     if (v.StateChangeInfo.VersionState != VersionState.Downloading) {
-                        Debug.WriteLine("Actual download started");
+                        Trace.WriteLine("Actual download started");
                         v.StateChangeInfo.VersionState = VersionState.Downloading;
                         if (total.HasValue)
                             v.StateChangeInfo.MaxProgress = total.Value;
@@ -987,9 +1030,9 @@ namespace MCLauncher {
                     } else {
                         throw new Exception("Unknown package type");
                     }
-                    Debug.WriteLine("Download complete");
+                    Trace.WriteLine("Download complete");
                 } catch (BadUpdateIdentityException) {
-                    Debug.WriteLine("Download failed due to failure to fetch download URL");
+                    Trace.WriteLine("Download failed due to failure to fetch download URL");
                     MessageBox.Show(
                         "无法获取版本的下载URL." +
                         (v.VersionType == VersionType.Beta ? "\n对于测试版，请确保您的帐户已订阅Xbox Insider Hub应用程序中的Minecraft测试版计划." : "")
@@ -997,7 +1040,7 @@ namespace MCLauncher {
                     v.StateChangeInfo = null;
                     return;
                 } catch (Exception e) {
-                    Debug.WriteLine("Download failed:\n" + e.ToString());
+                    Trace.WriteLine("Download failed:\n" + e.ToString());
                     if (!(e is TaskCanceledException))
                         MessageBox.Show("下载失败:\n" + e.ToString());
                     v.StateChangeInfo = null;
@@ -1015,14 +1058,14 @@ namespace MCLauncher {
                         throw new Exception("Unknown package type");
                     }
                     if (UserPrefs.DeleteAppxAfterDownload) {
-                        Debug.WriteLine("Deleting package to reduce disk usage");
+                        Trace.WriteLine("Deleting package to reduce disk usage");
                         File.Delete(dlPath);
                     } else {
-                        Debug.WriteLine("Not deleting package due to user preferences");
+                        Trace.WriteLine("Not deleting package due to user preferences");
                     }
                 } catch (Exception e) {
                     Debug.WriteLine("Extraction failed:\n" + e.ToString());
-                    MessageBox.Show("提取失败:\n" + e.ToString());
+                    MessageBox.Show("Extraction failed:\n" + e.ToString());
                     v.StateChangeInfo = null;
                     return;
                 }
@@ -1034,31 +1077,42 @@ namespace MCLauncher {
         private async Task<bool> Remove(Version v) {
             try {
                 v.StateChangeInfo = new VersionStateChangeInfo(VersionState.Unregistering);
-                Debug.WriteLine("Unregistering version " + v.DisplayName);
+                Trace.WriteLine("Unregistering version " + v.DisplayName);
                 try {
-                    await UnregisterPackage(v.GamePackageFamily, v, skipBackup: false);
+                    int unregistered = 0;
+                    foreach (var pkg in new PackageManager().FindPackages(v.GamePackageFamily)) {
+                        string location = GetPackagePath(pkg);
+                        if (location == "" || Path.GetFullPath(location) == Path.GetFullPath(v.GameDirectory)) {
+                            Trace.WriteLine("Removing package: " + pkg.Id.FullName + " " + location);
+                            await RemovePackage(pkg, v.GamePackageFamily, v, skipBackup: false);
+                            unregistered++;
+                        }
+                    }
+                    if (unregistered == 0) {
+                        Trace.WriteLine($"Looks like {v.GameDirectory} is not registered with the system, no unregistering performed");
+                    }
                 } catch (Exception e) {
                     Debug.WriteLine("Failed unregistering package:\n" + e.ToString());
-                    MessageBox.Show("解除注册程序包失败:\n" + e.ToString(), "Uninstall error");
+                    MessageBox.Show("Failed unregistering package:\n" + e.ToString(), "Uninstall error");
                     return false;
                 }
-                Debug.WriteLine("Cleaning up game files for version " + v.DisplayName);
+                Trace.WriteLine("Cleaning up game files for version " + v.DisplayName);
                 v.StateChangeInfo = new VersionStateChangeInfo(VersionState.CleaningUp);
                 try {
                     // Use the \\?\ prefix to support long paths
                     Directory.Delete(@"\\?\" + Path.GetFullPath(v.GameDirectory), true);
                 } catch (Exception e) {
                     Debug.WriteLine("Failed deleting game directory:\n" + e.ToString());
-                    MessageBox.Show("删除游戏目录失败:\n" + e.ToString(), "Uninstall error");
+                    MessageBox.Show("Failed deleting game directory:\n" + e.ToString(), "Uninstall error");
                     return false;
                 }
 
                 if (v.IsImported) {
                     Dispatcher.Invoke(() => _versions.Remove(v));
-                    Debug.WriteLine("Removed imported version " + v.DisplayName);
+                    Trace.WriteLine("Removed imported version " + v.DisplayName);
                 } else {
                     v.UpdateInstallStatus();
-                    Debug.WriteLine("Removed release version " + v.DisplayName);
+                    Trace.WriteLine("Removed release version " + v.DisplayName);
                 }
 
                 return true;
@@ -1098,7 +1152,11 @@ namespace MCLauncher {
             if (!File.Exists(@"Log.txt")) {
                 MessageBox.Show("日志文件未找到", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             } else 
-                Process.Start(@"Log.txt");
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = @"Log.txt",
+                    UseShellExecute = true
+                });
         }
 
         private void MenuItemOpenDataDirClicked(object sender, RoutedEventArgs e) {
@@ -1115,13 +1173,13 @@ namespace MCLauncher {
                 MessageBoxButton.OKCancel
             );
             if (result == MessageBoxResult.OK) {
-                Debug.WriteLine("Starting uninstall of ALL versions!");
+                Trace.WriteLine("Starting uninstall of ALL versions!");
                 foreach (var version in _versions) {
                     if (version.IsInstalled) {
                         InvokeRemove(version);
                     }
                 }
-                Debug.WriteLine("Scheduled uninstall of ALL versions.");
+                Trace.WriteLine("Scheduled uninstall of ALL versions.");
             }
         }
 
@@ -1173,7 +1231,7 @@ namespace MCLauncher {
             var dialog = new ProgressDialog();
             dialog.Owner = this;
             bool allowClose = false;
-            dialog.Closing += (object sender_, CancelEventArgs e_) => {
+            dialog.Closing += (object? sender_, CancelEventArgs e_) => {
                 if (!allowClose) {
                     e_.Cancel = true;
                 }
@@ -1181,15 +1239,15 @@ namespace MCLauncher {
 
             dialog.Show();
 
-            Debug.WriteLine("Cleaning up system");
+            Trace.WriteLine("Cleaning up system");
             try {
                 await UnregisterPackage(MinecraftPackageFamilies.MINECRAFT, null, skipBackup: false);
                 await UnregisterPackage(MinecraftPackageFamilies.MINECRAFT_PREVIEW, null, skipBackup: false);
             } catch (Exception ex) {
                 Debug.WriteLine("Error cleaning up: " + ex.Message);
-                MessageBox.Show("清理时出错。查看日志以了解详细信息.", "Error");
+                MessageBox.Show("An error occurred while cleaning up. Check the log for details.", "Error");
             }
-            Debug.WriteLine("Done cleaning up");
+            Trace.WriteLine("Done cleaning up");
             allowClose = true;
             dialog.Close();
             MessageBox.Show("清理已完成。您现在应该可以从Microsoft Store安装Minecraft了.", "Cleanup completed");
@@ -1216,7 +1274,7 @@ namespace MCLauncher {
 
         public class NotifyPropertyChangedBase : INotifyPropertyChanged {
 
-            public event PropertyChangedEventHandler PropertyChanged;
+            public event PropertyChangedEventHandler? PropertyChanged;
 
             protected void OnPropertyChanged(string name) {
                 if (PropertyChanged != null)
@@ -1251,7 +1309,7 @@ namespace MCLauncher {
         public class Version : NotifyPropertyChangedBase {
             public static readonly string UNKNOWN_UUID = "UNKNOWN";
 
-            public Version(string uuid, string name, VersionType versionType, bool isNew, ICommonVersionCommands commands, PackageType packageType, List<string> downloadUrls) {
+            public Version(string uuid, string name, VersionType versionType, bool isNew, ICommonVersionCommands commands, PackageType packageType, List<string>? downloadUrls) {
                 this.UUID = uuid;
                 this.Name = name;
                 this.VersionType = versionType;
@@ -1272,6 +1330,7 @@ namespace MCLauncher {
                 this.RemoveCommand = commands.RemoveCommand;
                 this.GameDirectory = directory;
                 this.PackageType = packageType;
+                this.DownloadURLs = new List<string>();
             }
 
             public string UUID { get; set; }
@@ -1328,9 +1387,9 @@ namespace MCLauncher {
             public ICommand DownloadCommand { get; set; }
             public ICommand RemoveCommand { get; set; }
 
-            private VersionStateChangeInfo _stateChangeInfo;
+            private VersionStateChangeInfo? _stateChangeInfo;
             private bool _isNew = false;
-            public VersionStateChangeInfo StateChangeInfo {
+            public VersionStateChangeInfo? StateChangeInfo {
                 get { return _stateChangeInfo; }
                 set { _stateChangeInfo = value; OnPropertyChanged("StateChangeInfo"); OnPropertyChanged("IsStateChanging"); }
             }
@@ -1415,7 +1474,20 @@ namespace MCLauncher {
                 }
             }
 
-            public ICommand CancelCommand { get; set; }
+            private ICommand? _cancelCommand = null;
+
+            public ICommand? CancelCommand {
+                get => _cancelCommand;
+                set {
+                    _cancelCommand = value;
+                    OnPropertyChanged("CancelCommand");
+                    OnPropertyChanged("HasCancelCommand");
+                }
+            }
+
+            public bool HasCancelCommand {
+                get => CancelCommand != null;
+            }
 
         }
 
