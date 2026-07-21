@@ -826,7 +826,7 @@ namespace MCLauncher {
             if (dataLocations.Count > 1) {
                 var messageString = "";
                 foreach (var loc in dataLocations) {
-                    messageString += $"\n - {loc.Key}: {loc.Value} worlds";
+                    messageString += $"\n - {loc.Key}: {loc.Value} 个世界";
                 }
                 Debug.WriteLine("Can't automatically restore Minecraft data - multiple locations with worlds found:" + messageString);
                 MessageBox.Show(
